@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+.DS_Store
+compact/build/
+*.wasm

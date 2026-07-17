@@ -1,0 +1,29 @@
+// VoiceGuard — Compact contract stub
+// Verifies a commitment (hash) of a classification result against a threshold,
+// without exposing the underlying audio or score.
+//
+// IMPORTANT: this contract does NOT generate proofs. Proof generation happens
+// off-chain via a local Proof Server (Docker, localhost:6300), which runs this
+// compiled circuit against a private witness. This contract only VERIFIES the
+// resulting proof and updates ledger state — it never emits a proof itself.
+//
+// TODO:
+//   - define real circuit for threshold check (this is what the off-chain
+//     Proof Server will execute against the private witness)
+//   - define private registry ledger (flagged session hashes)
+//   - wire up real proof verification logic
+
+module VoiceGuard {
+
+  // Placeholder ledger entry: stores only a hash, never raw data.
+  export ledger verifiedResults: Map<Bytes<32>, Boolean>;
+
+  export circuit submitResult(resultHash: Bytes<32>, passedThreshold: Boolean): [] {
+    // TODO: replace with real ZK verification logic
+    verifiedResults.insert(resultHash, passedThreshold);
+  }
+
+  export circuit checkResult(resultHash: Bytes<32>): Boolean {
+    return verifiedResults.member(resultHash);
+  }
+}
