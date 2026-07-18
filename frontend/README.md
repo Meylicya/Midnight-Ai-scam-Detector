@@ -1,4 +1,4 @@
-# Frontend (P1)
+# Frontend, Mouna
 
 React + Vite app. Record/upload audio, show waveform, display verdict + on-chain badge.
 
