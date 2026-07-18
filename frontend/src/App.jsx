@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Mic, Upload, AlertCircle, ShieldCheck, Ear, Clock, Lock, Search, ArrowLeft } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────
