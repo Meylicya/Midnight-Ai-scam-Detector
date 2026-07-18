@@ -1,79 +1,99 @@
+import traceback
+import sys
+import io
+import os
+import tempfile
 from typing import Optional
-
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pydub import AudioSegment
+from pydub import AudioSegment
 
-from ml.classify import classify
+# FORCIBLY set the path to FFmpeg
+# Use forward slashes (/) even on Windows to avoid escape character issues
+AudioSegment.converter = "C:/ffmpeg-2026-07-13-git-9c2aabaa34-full_build/bin/ffmpeg.exe"
 
+# Import your model
+from ml.model import VoiceDetector
+
+# 1. Initialize App and Detector
 app = FastAPI()
+detector = VoiceDetector()
 
+# 2. Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # Change to ["http://localhost:5173"] for production
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory registry — fast-path MVP for the 48-hour build. Swap for the
-# Midnight registry ledger (see /contract/voiceguard.compact) once P4's
-# contract is ready to accept real submissions.
-_registry: dict[str, int] = {}
+# 3. In-memory registry
+_registry = {}
 
-
-def _suffix_for(filename: Optional[str]) -> str:
-    """Preserve the real upload's extension instead of forcing .wav on
-    everything — the frontend sends recordings as .webm, not .wav."""
-    if not filename or "." not in filename:
-        return ".wav"
-    ext = filename.rsplit(".", 1)[-1].lower()
-    if ext in {"wav", "webm", "mp3", "m4a", "ogg"}:
-        return f".{ext}"
-    return ".wav"
-
+# --- API Endpoints ---
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
-    audio_bytes = await file.read()  # kept in memory, never written except
-    # inside classify()'s short-lived temp file, which it deletes itself
+    """
+    Frontend alias for the prediction pipeline.
+    """
+    # Simply call the existing predict function
+    return await predict(file)
 
+
+@app.post("/predict")
+async def predict(file: UploadFile = File(...)):
+    print(f"--- Received request for: {file.filename} ---")
     try:
-        result = classify(audio_bytes, suffix=_suffix_for(file.filename))
-    except Exception as e:
-        print(f"CRITICAL ERROR: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Backend Error: {str(e)}")
+        # 1. Read bytes
+        audio_data = await file.read()
+        print(f"Read {len(audio_data)} bytes of audio.")
 
-    return result
+        # 2. Convert via Pydub
+        audio = AudioSegment.from_file(io.BytesIO(audio_data))
+        print("Pydub conversion successful.")
+
+        # 3. Save temp file
+        temp_path = "temp_processing.wav"
+        audio.export(temp_path, format="wav")
+        print(f"File exported to {temp_path}")
+
+        # 4. Run Prediction
+        print("Calling detector.predict()...")
+        result = detector.predict(temp_path)
+        print("Prediction returned successfully.")
+        
+        return result
+
+    except Exception as e:
+        print("--- CRITICAL FAILURE ---")
+        traceback.print_exc()  # This will print the FULL file and line number
+        print("------------------------")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class ReportRequest(BaseModel):
     commitment_hash: Optional[str] = None
     identifier_hash: Optional[str] = None
-    identifier_type: Optional[str] = None  # "phone" | "email" | "handle"
-
+    identifier_type: Optional[str] = None 
 
 @app.post("/report")
 async def report(body: ReportRequest):
-    """
-    Records a scam report. Only ever receives hashes — never a raw phone
-    number, email, or handle.
-    """
     if body.identifier_hash:
         _registry[body.identifier_hash] = _registry.get(body.identifier_hash, 0) + 1
-
     return {"ok": True, "total_reports": sum(_registry.values())}
 
 
 @app.get("/registry/check")
 async def check_registry(hash: str, type: Optional[str] = None):
-    """Looks up an identifier_hash (client-computed) against the registry."""
     count = _registry.get(hash, 0)
     return {"flagged": count > 0, "report_count": count}
 
 
 @app.get("/stats")
 async def stats():
-    """Aggregate, anonymous — no login required to read these."""
     return {
         "total_reports": sum(_registry.values()),
         "unique_flagged_identifiers": len(_registry),
