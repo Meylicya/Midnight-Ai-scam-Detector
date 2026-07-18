@@ -29,3 +29,7 @@ async def analyze(file: UploadFile):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.get("/")
+def read_root():
+    return {"message": "Scam detector backend is running!"}
