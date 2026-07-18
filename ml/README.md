@@ -9,8 +9,12 @@ python classify.py path/to/test_clip.wav
 ```
 
 ## TODO
-- [ ] Find pretrained ASVspoof-based model on Hugging Face
-- [ ] Test on real short clips (<5 sec inference target)
-- [ ] Wrap as `classify(audio_bytes) -> dict`
+- [/] Find pretrained ASVspoof-based model on Hugging Face
+- [ /] Test on real short clips (<5 sec inference target)
+- [/ ] Wrap as `classify(audio_bytes) -> dict`
 - [ ] Hand off function signature to P2 for backend integration
 - [ ] (Stretch) fine-tune / tune thresholds if time allows
+
+ ## Installation
+1) Install dependencies: ```bash pip install -r requirements.txt ```
+2) Run classifier: ```bash python classify.py path/to/audio.wav

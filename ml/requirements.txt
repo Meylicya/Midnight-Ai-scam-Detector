@@ -1,4 +1,6 @@
 torch==2.3.1
+torchaudio 
 transformers==4.42.3
 librosa==0.10.2
 numpy==1.26.4
+soundfile
