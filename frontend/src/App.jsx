@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Mic, Upload, AlertCircle, ShieldCheck, Ear, ChevronDown, Clock, Lock } from "lucide-react";
+import { Mic, Upload, AlertCircle, ShieldCheck, Ear, Clock, Lock, Search, ArrowLeft } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────
 // BACKEND CONTRACT (coordinate with P2 before changing this)
@@ -108,11 +108,6 @@ function formatElapsed(ms) {
   return `${pad(minutes)}:${pad(seconds)}.${pad(centis)}`;
 }
 
-function truncateHash(hash) {
-  if (!hash) return "—";
-  return `${hash.slice(0, 8)}...${hash.slice(-4)}`;
-}
-
 // ── Identifier classification — one text field, three possible types ──────
 // Heuristic, not perfect, but covers the realistic cases without asking
 // the person to pick a type themselves.
@@ -159,7 +154,6 @@ export default function App() {
   const [reportIdentifier, setReportIdentifier] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [micError, setMicError] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
 
   // "Check a number" screen — look someone up before ever recording audio
   const [checkIdentifier, setCheckIdentifier] = useState("");
@@ -327,7 +321,6 @@ export default function App() {
     setResult(data);
     setReported(false);
     setReportIdentifier("");
-    setShowDetails(false);
     setStatus("SUCCESS");
   };
 
@@ -337,7 +330,6 @@ export default function App() {
     setStepIndex(0);
     setReported(false);
     setReportIdentifier("");
-    setShowDetails(false);
   };
 
   // ── Report a scam — sends only hashes, never the raw identifier ──────
@@ -405,7 +397,6 @@ export default function App() {
     setElapsedMs(8420);
     setStepIndex(PROCESSING_STEPS.length - 1);
     setReported(false);
-    setShowDetails(false);
     setStatus(nextStatus);
   };
 
@@ -528,10 +519,11 @@ export default function App() {
 
               <button
                 onClick={() => setStatus("CHECK")}
-                className="text-xs mt-4 cursor-pointer"
-                style={{ color: palette.inkFaint }}
+                className="w-full flex items-center justify-center gap-2 font-medium py-3 rounded-xl transition-all active:scale-[0.99] cursor-pointer mt-2.5"
+                style={{ backgroundColor: palette.accentSoft, color: palette.accent, border: `1px solid ${palette.surfaceBorder}` }}
               >
-                Already have a number to check? Look it up instead
+                <Search className="h-4 w-4" strokeWidth={2} />
+                Check a number, email, or handle
               </button>
             </div>
           )}
@@ -539,6 +531,16 @@ export default function App() {
           {/* STATE A: IDLE */}
           {status === "IDLE" && (
             <div className="w-full flex flex-col items-center">
+              <button
+                onClick={() => setStatus("INTRO")}
+                aria-label="Back"
+                className="w-full flex items-center gap-1.5 text-sm mb-6 cursor-pointer"
+                style={{ color: palette.inkMuted }}
+              >
+                <ArrowLeft className="h-4 w-4" strokeWidth={2} />
+                Back
+              </button>
+
               <h1
                 className="text-xl text-center"
                 style={{ fontFamily: fontHeading, fontWeight: 600, color: palette.ink }}
@@ -719,7 +721,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Midnight badge — plain language first, technical details tucked away */}
+              {/* Midnight badge — plain language, no expandable technical panel */}
               <div
                 className="rounded-2xl p-4 text-xs w-full mt-4"
                 style={{ backgroundColor: palette.surface, border: `1px solid ${palette.surfaceBorder}` }}
@@ -731,31 +733,6 @@ export default function App() {
                 <p style={{ color: palette.inkMuted }}>
                   No one, including us, can see or replay your original clip.
                 </p>
-
-                <button
-                  onClick={() => setShowDetails((v) => !v)}
-                  aria-expanded={showDetails}
-                  className="w-full flex items-center justify-between mt-2 pt-2 cursor-pointer"
-                  style={{ borderTop: `1px solid ${palette.surfaceBorder}`, color: palette.inkFaint, fontFamily: fontMono }}
-                >
-                  <span className="text-[11px]">
-                    {showDetails ? "Hide Security Registry Footprint" : "Show Security Registry Footprint"}
-                  </span>
-                  <ChevronDown
-                    className="h-3.5 w-3.5 transition-transform"
-                    style={{ transform: showDetails ? "rotate(180deg)" : "rotate(0deg)" }}
-                  />
-                </button>
-
-                {showDetails && (
-                  <div
-                    className="mt-2 pt-2 space-y-1"
-                    style={{ borderTop: `1px solid ${palette.surfaceBorder}`, fontFamily: fontMono, color: palette.inkMuted }}
-                  >
-                    <p>Proof reference: {truncateHash(result?.commitment_hash)}</p>
-                    <p>Secured on-chain via the Midnight network</p>
-                  </div>
-                )}
               </div>
 
               <div className="w-full mt-6">
