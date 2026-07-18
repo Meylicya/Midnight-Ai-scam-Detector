@@ -1,15 +1,13 @@
-import os
-import shutil
-import hashlib
+from typing import Optional
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from ml.model import VoiceDetector
+from pydantic import BaseModel
 
-# 1. Initialize FastAPI and the Detector
+from ml.classify import classify
+
 app = FastAPI()
-detector = VoiceDetector()
 
-# 2. Add CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,42 +15,75 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. API Endpoint
-@app.post("/predict")
-async def predict(file: UploadFile = File(...)):
-    # Create a temporary file path for the audio
-    temp_file_path = f"temp_{file.filename}"
-    
+# In-memory registry — fast-path MVP for the 48-hour build. Swap for the
+# Midnight registry ledger (see /contract/voiceguard.compact) once P4's
+# contract is ready to accept real submissions.
+_registry: dict[str, int] = {}
+
+
+def _suffix_for(filename: Optional[str]) -> str:
+    """Preserve the real upload's extension instead of forcing .wav on
+    everything — the frontend sends recordings as .webm, not .wav."""
+    if not filename or "." not in filename:
+        return ".wav"
+    ext = filename.rsplit(".", 1)[-1].lower()
+    if ext in {"wav", "webm", "mp3", "m4a", "ogg"}:
+        return f".{ext}"
+    return ".wav"
+
+
+@app.post("/analyze")
+async def analyze(file: UploadFile = File(...)):
+    audio_bytes = await file.read()  # kept in memory, never written except
+    # inside classify()'s short-lived temp file, which it deletes itself
+
     try:
-        # Save the uploaded file to a temporary location
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # Call the detector using the file path
-        # Note: We use .predict() because that is what is defined in your model.py
-        result = detector.predict(temp_file_path)
-        
-        # Generate the hash using the file's binary content
-        # We need to re-read the file bytes for hashing
-        with open(temp_file_path, "rb") as f:
-            file_bytes = f.read()
-            commitment_hash = hashlib.sha256(file_bytes).hexdigest()
-
-        return {
-            "verdict": result["verdict"],
-            "confidence": result["confidence"],
-            "risk_level": result["risk_level"],
-            "commitment_hash": commitment_hash
-        }
-
+        result = classify(audio_bytes, suffix=_suffix_for(file.filename))
     except Exception as e:
         print(f"CRITICAL ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Backend Error: {str(e)}")
-    
-    finally:
-        # Clean up: delete the temporary file after processing
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+
+    return result
+
+
+class ReportRequest(BaseModel):
+    commitment_hash: Optional[str] = None
+    identifier_hash: Optional[str] = None
+    identifier_type: Optional[str] = None  # "phone" | "email" | "handle"
+
+
+@app.post("/report")
+async def report(body: ReportRequest):
+    """
+    Records a scam report. Only ever receives hashes — never a raw phone
+    number, email, or handle.
+    """
+    if body.identifier_hash:
+        _registry[body.identifier_hash] = _registry.get(body.identifier_hash, 0) + 1
+
+    return {"ok": True, "total_reports": sum(_registry.values())}
+
+
+@app.get("/registry/check")
+async def check_registry(hash: str, type: Optional[str] = None):
+    """Looks up an identifier_hash (client-computed) against the registry."""
+    count = _registry.get(hash, 0)
+    return {"flagged": count > 0, "report_count": count}
+
+
+@app.get("/stats")
+async def stats():
+    """Aggregate, anonymous — no login required to read these."""
+    return {
+        "total_reports": sum(_registry.values()),
+        "unique_flagged_identifiers": len(_registry),
+    }
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 
 @app.get("/")
 def read_root():
