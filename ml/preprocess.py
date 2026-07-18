@@ -1,6 +1,6 @@
 import librosa
 
-from config import SAMPLE_RATE
+from .config import SAMPLE_RATE
 
 
 def load_audio(audio_path):

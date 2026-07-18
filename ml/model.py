@@ -1,12 +1,9 @@
 import torch
 
-from transformers import (
-    AutoFeatureExtractor,
-    AutoModelForAudioClassification
-)
+from transformers import AutoFeatureExtractor, Wav2Vec2ForSequenceClassification
 
-from config import MODEL_ID, SAMPLE_RATE, HIGH_CONFIDENCE
-from preprocess import load_audio
+from .preprocess import load_audio
+from .config import MODEL_ID, SAMPLE_RATE, HIGH_CONFIDENCE
 
 
 class VoiceDetector:
@@ -23,10 +20,7 @@ class VoiceDetector:
         )
 
 
-        self.model = (
-            AutoModelForAudioClassification
-            .from_pretrained(MODEL_ID)
-        )
+        self.model = Wav2Vec2ForSequenceClassification.from_pretrained(MODEL_ID)
 
 
         self.model.eval()
