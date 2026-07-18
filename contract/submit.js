@@ -54,3 +54,36 @@ setupWallet().catch(console.error);
 
 // Use modern export syntax to expose clean interfaces to the bridge server
 export { submitResult, checkResult };
+
+// ============================================================================
+// TEMPORARY HACKATHON TEST RUNNER
+// ============================================================================
+async function runTestPipeline() {
+  // 1. Wait a moment to ensure setupWallet finishes connecting
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  if (!wallet) {
+    throw new Error("Wallet failed to initialize in time.");
+  }
+
+  console.log("\n--- STARTING LIVE BLOCKCHAIN TEST ---");
+  
+  // 2. Mock data to submit: a dummy file hash and a boolean flag
+  const dummyHash = "0xabc123xyz789def456";
+  const dummyThreshold = true;
+
+  // 3. Try to submit the transaction to the docker node
+  const receipt = await submitResult(dummyHash, dummyThreshold);
+  console.log(`\n🎉 SUCCESS! Block confirmation receipt received.`);
+  
+  // 4. Try to query it back from the indexer/ledger state
+  const isFound = await checkResult(dummyHash);
+  console.log(`Ledger state verification: ${isFound ? "FOUND" : "NOT FOUND"}`);
+  console.log("--- TEST PIPELINE COMPLETE ---");
+}
+
+// Execute the test runner and catch any errors
+runTestPipeline().catch((err) => {
+  console.error("\n❌ TEST FAILED!");
+  console.error(err);
+});
