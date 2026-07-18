@@ -13,17 +13,54 @@
 //   - define private registry ledger (flagged session hashes)
 //   - wire up real proof verification logic
 
+import CompactStandardLibrary;
+
+// backend calls my contract function and hands me 2 things 
+// resultHash: A 32-byte scrambled text string (a SHA-256 hash) representing the audio analysis result. 
+// identifierHash: A 32-byte scrambled text string representing a phone number, email, or social media handle.  
+// i send back to the backend 
+//For saving actions (submitResult, reportIdentifier): You send back a confirmation that the proof was generated and saved to the ledger.
+//For checking actions (checkResult, checkIdentifier): You send back a simple Boolean (True/False) or a Uint (an integer number) showing how many times a scammer was flagged.  
+
 module VoiceGuard {
 
-  // Placeholder ledger entry: stores only a hash, never raw data.
+  // --- 1. STORAGE LEDGERS ---
+  
+  // Maps a 32-byte audio analysis hash to its verification status
   export ledger verifiedResults: Map<Bytes<32>, Boolean>;
 
+  // Maps a 32-byte phone/email hash to the total number of scam reports
+  export ledger reportCounts: Map<Bytes<32>, Uint<32>>;
+
+
+  // --- 2. AUDIO VERIFICATION CIRCUITS ---
+
+  // Saves a verified analysis result hash to the blockchain
   export circuit submitResult(resultHash: Bytes<32>, passedThreshold: Boolean): [] {
-    // TODO: replace with real ZK verification logic
     verifiedResults.insert(resultHash, passedThreshold);
   }
 
+  // Looks up an audio hash to see if it has been registered
   export circuit checkResult(resultHash: Bytes<32>): Boolean {
     return verifiedResults.member(resultHash);
+  }
+
+
+  // --- 3. SCAMMER IDENTIFIER CIRCUITS ---
+
+  // Increments the report counter for a specific phone number or email hash
+  export circuit reportIdentifier(identifierHash: Bytes<32>): [] {
+    const currentCount = reportCounts.member(identifierHash)
+      ? reportCounts.lookup(identifierHash)
+      : 0;
+      
+    reportCounts.insert(identifierHash, currentCount + 1);
+  }
+
+  // Returns the total number of times an identifier has been reported
+  export circuit checkIdentifier(identifierHash: Bytes<32>): Uint<32> {
+    return reportCounts.member(identifierHash)
+      ? reportCounts.lookup(identifierHash)
+      : 0;
   }
 }
