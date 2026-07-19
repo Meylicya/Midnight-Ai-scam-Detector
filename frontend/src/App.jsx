@@ -20,7 +20,17 @@ import { Mic, Upload, AlertCircle, ShieldCheck, Ear, Clock, Lock, Search, ArrowL
 // If this endpoint isn't running yet (404/network error), the UI falls back
 // to a mock result after a short delay so the demo still works standalone.
 // ─────────────────────────────────────────────────────────────────────────
-const ANALYZE_ENDPOINT = "/analyze";
+// During local development, the frontend (Vite, port 5173) and backend
+// (uvicorn, port 8000) run as two separate servers. A relative path like
+// "/analyze" would go to localhost:5173/analyze, which doesn't exist —
+// it needs the full backend address. main.py already has CORS wide open
+// (allow_origins=["*"]) so calling across ports like this works fine.
+//
+// Before deploying for real, change API_BASE to wherever the backend
+// actually lives (e.g. a real domain) instead of localhost.
+const API_BASE = "http://localhost:8000";
+
+const ANALYZE_ENDPOINT = `${API_BASE}/analyze`;
 
 // ─────────────────────────────────────────────────────────────────────────
 // SCAM REGISTRY CONTRACT (coordinate with P2/P4)
@@ -49,8 +59,8 @@ const ANALYZE_ENDPOINT = "/analyze";
 // 48-hour build, a simple backend counter is a fine fast-path stand-in —
 // swap it for the Midnight-backed version if time allows.
 // ─────────────────────────────────────────────────────────────────────────
-const REPORT_ENDPOINT = "/report";
-const CHECK_ENDPOINT = "/registry/check";
+const REPORT_ENDPOINT = `${API_BASE}/report`;
+const CHECK_ENDPOINT = `${API_BASE}/registry/check`;
 
 // Auto-stop recording at this length — keeps clips short, keeps the demo
 // snappy, and means audio is never held longer than it needs to be.
@@ -67,11 +77,13 @@ const MOCK_RESULTS = {
     verdict: "human",
     confidence: 0.9427,
     commitment_hash: "0x8f3c9e1a4d7b6205af49c1e0033b2a1",
+    mock: true,
   },
   AI_GENERATED: {
     verdict: "ai_generated",
     confidence: 0.8816,
     commitment_hash: "0x2b71fd90c34e88a015d7f42e91c0f3a9",
+    mock: true,
   },
 };
 
@@ -192,11 +204,14 @@ export default function App() {
       typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia;
 
     // Some sandboxed/preview environments never resolve or reject the
-    // permission prompt at all (no proper permissions policy on the iframe),
-    // which makes the button look broken rather than gracefully falling
-    // back. Race against a short timeout so it always resolves one way
-    // or the other within ~1.5s — real deployments with a real mic will
-    // resolve almost instantly and never hit this timeout.
+    // permission prompt at all (no proper permissions policy on the
+    // iframe) — this timeout exists ONLY to catch that broken case, not
+    // to rush a real person clicking "Allow" in an actual browser prompt.
+    // 1.5s was too aggressive: a normal human takes longer than that just
+    // to notice the popup, which meant this was falling back to fake
+    // recording almost every time on a real machine. 20s gives a real
+    // permission click plenty of room while still preventing an infinite
+    // hang in genuinely broken environments.
     if (!micAvailable) {
       beginSimulatedRecording();
       return;
@@ -205,7 +220,7 @@ export default function App() {
     try {
       const stream = await Promise.race([
         navigator.mediaDevices.getUserMedia({ audio: true }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("mic-timeout")), 1500)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("mic-timeout")), 20000)),
       ]);
 
       const recorder = new MediaRecorder(stream);
@@ -675,6 +690,15 @@ export default function App() {
               className="w-full flex flex-col items-center rounded-2xl p-4 transition-colors"
               style={{ backgroundColor: verdictSoft, border: `1px solid ${verdictBorder}` }}
             >
+              {result?.mock && (
+                <div
+                  className="text-[10px] font-medium tracking-wide px-2.5 py-1 rounded-full mb-3"
+                  style={{ backgroundColor: palette.surface, color: palette.inkFaint, border: `1px solid ${palette.surfaceBorder}` }}
+                >
+                  DEMO DATA — backend not connected
+                </div>
+              )}
+
               {isAi ? (
                 <AlertCircle className="h-10 w-10 mb-3" style={{ color: verdictColor }} strokeWidth={2} />
               ) : (
@@ -827,6 +851,14 @@ export default function App() {
                     border: `1px solid ${checkResult.flagged ? palette.alertBorder : palette.humanBorder}`,
                   }}
                 >
+                  {checkResult.mock && (
+                    <div
+                      className="text-[10px] font-medium tracking-wide px-2.5 py-1 rounded-full mb-2 inline-block"
+                      style={{ backgroundColor: palette.surface, color: palette.inkFaint, border: `1px solid ${palette.surfaceBorder}` }}
+                    >
+                      DEMO DATA — backend not connected
+                    </div>
+                  )}
                   <p
                     className="text-sm font-semibold"
                     style={{ color: checkResult.flagged ? palette.alert : palette.human }}
