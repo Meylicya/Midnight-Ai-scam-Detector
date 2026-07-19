@@ -67,23 +67,24 @@ function formatElapsed(ms) {
   return `${pad(minutes)}:${pad(seconds)}.${pad(centis)}`;
 }
 
-// ── Injected Lace Wallet Extension Connection Helper ──
+// --- 1. UTILITY FUNCTIONS (Outside of App) ---
+// Updated to call .enable(), which triggers the Lace wallet connection popup!
 const connectWallet = async () => {
-  const midnightProvider = window.midnight?.lighthouse;
-
-  if (midnightProvider) {
-    try {
-      const walletAPI = await midnightProvider.enable();
-      console.log("Lace wallet connected successfully!");
-      return walletAPI; 
-    } catch (error) {
-      console.error("User rejected the wallet connection request.", error);
-      return null;
+    if (window.cardano && window.cardano.lace) {
+        return await window.cardano.lace.enable();
     }
-  } else {
-    console.error("Midnight wallet extension not detected! Please ensure Lace is installed.");
-    return null;
-  }
+    return new Promise((resolve) => {
+        const checkInterval = setInterval(async () => {
+            if (window.cardano && window.cardano.lace) {
+                clearInterval(checkInterval);
+                resolve(await window.cardano.lace.enable());
+            }
+        }, 500);
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(null);
+        }, 5000);
+    });
 };
 
 function classifyIdentifier(raw) {
@@ -113,6 +114,7 @@ async function sha256Hex(text) {
     .join("");
 }
 
+// --- 2. MAIN APP COMPONENT ---
 export default function App() {
   const [status, setStatus] = useState("INTRO");
   const [verdict, setVerdict] = useState("HUMAN"); 

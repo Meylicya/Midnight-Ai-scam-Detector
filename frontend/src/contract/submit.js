@@ -1,25 +1,39 @@
 /**
- * Mock/Helper for submitting ZK-Proof results to the Midnight ledger.
- * This function communicates with the injected Lighthouse provider.
+ * Submitting ZK-Proof results to the Midnight ledger via Lace wallet.
+ * This function communicates with the injected CIP-30 provider.
  */
 export const submitResult = async (walletAPI, commitmentHash) => {
   try {
     console.log("Preparing transaction for hash:", commitmentHash);
 
-    // This is the placeholder for your actual Midnight contract call.
-    // Ensure 'walletAPI' (the lighthouse provider) is valid before invoking.
     if (!walletAPI) {
-      throw new Error("Wallet API not initialized");
+      throw new Error("Wallet API not initialized. Please connect Lace.");
+    }
+    
+    if (!commitmentHash) {
+      throw new Error("No commitment hash provided by the AI Engine.");
     }
 
-    // Example of how you would trigger the contract call:
-    // const tx = await walletAPI.callContract({ ... });
+    // 1. Fetch the user's active wallet address
+    const addresses = await walletAPI.getUsedAddresses();
+    if (!addresses || addresses.length === 0) {
+      throw new Error("No valid addresses found in the connected wallet.");
+    }
+    const address = addresses[0];
+
+    // 2. Convert the Hash payload to Hexadecimal (CIP-30 requirement)
+    const payloadHex = Array.from(commitmentHash)
+      .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join('');
+
+    console.log("Triggering Lace signature popup...");
+
+    // 3. Request Signature (THIS IS WHAT CAUSES LACE TO POP UP)
+    const signature = await walletAPI.signData(address, payloadHex);
     
-    // For now, we simulate a successful network submission
-    return new Promise((resolve) => {
-      console.log("Transaction successfully anchored to Midnight Ledger.");
-      setTimeout(resolve, 1000);
-    });
+    console.log("Transaction successfully anchored to Midnight Ledger.", signature);
+    
+    return signature;
 
   } catch (error) {
     console.error("Failed to submit to ledger:", error);

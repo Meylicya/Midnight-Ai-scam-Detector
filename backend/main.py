@@ -3,11 +3,11 @@ import sys
 import io
 import os
 import tempfile
+import hashlib
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from pydub import AudioSegment
 from pydub import AudioSegment
 
 # FORCIBLY set the path to FFmpeg
@@ -39,7 +39,6 @@ async def analyze(file: UploadFile = File(...)):
     """
     Frontend alias for the prediction pipeline.
     """
-    # Simply call the existing predict function
     return await predict(file)
 
 
@@ -50,6 +49,10 @@ async def predict(file: UploadFile = File(...)):
         # 1. Read bytes
         audio_data = await file.read()
         print(f"Read {len(audio_data)} bytes of audio.")
+
+        # --- NEW: Generate a cryptographic hash of the audio file to send to Lace ---
+        file_hash = hashlib.sha256(audio_data).hexdigest()
+        print(f"Generated commitment hash: {file_hash}")
 
         # 2. Convert via Pydub
         audio = AudioSegment.from_file(io.BytesIO(audio_data))
@@ -65,6 +68,13 @@ async def predict(file: UploadFile = File(...)):
         result = detector.predict(temp_path)
         print("Prediction returned successfully.")
         
+        # 5. Inject the commitment hash into the response for the frontend
+        if isinstance(result, dict):
+            result["commitment_hash"] = file_hash
+        else:
+            # Fallback just in case your model doesn't return a dictionary natively
+            result = {"verdict": result, "commitment_hash": file_hash}
+            
         return result
 
     except Exception as e:
