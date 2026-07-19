@@ -79,7 +79,7 @@ def interpret_result(label, confidence):
     )
 
 
-    if label == "real":
+    if label == "fake":
 
         if confidence_percent >= HIGH_CONFIDENCE:
             risk = "LOW"
