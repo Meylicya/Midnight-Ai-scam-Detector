@@ -10,9 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pydub import AudioSegment
 
-# FORCIBLY set the path to FFmpeg
-# Use forward slashes (/) even on Windows to avoid escape character issues
-AudioSegment.converter = "C:/ffmpeg-2026-07-13-git-9c2aabaa34-full_build/bin/ffmpeg.exe"
 
 # Import your model
 from ml.model import VoiceDetector

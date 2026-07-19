@@ -259,26 +259,32 @@ export default function App() {
       }
       const aiData = await apiResponse.json();
 
-      // --- PHASE 2: LAUNCH LIGHTHOUSE/LACE ATTESTATION PROMPT ---
-      const walletAPI = await connectWallet();
-      if (!walletAPI) {
-        throw new Error("Midnight Ledger authentication rejected by user or extension missing.");
+      // Show the REAL verdict immediately. This is a genuine, already-computed
+      // result from the backend — it must never be hidden or replaced just
+      // because a later, optional blockchain step fails or Lace isn't installed.
+      applyResult({ ...aiData, anchored: false });
+
+      // --- PHASE 2/3: OPTIONAL Lace anchoring — best-effort only, never gates the result ---
+      try {
+        const walletAPI = await connectWallet();
+        if (walletAPI) {
+          await submitResult(walletAPI, aiData.commitment_hash);
+          setResult((prev) => (prev ? { ...prev, anchored: true } : prev));
+        } else {
+          console.warn("Lace wallet not available — showing result without on-chain anchoring.");
+        }
+      } catch (anchorErr) {
+        console.warn("Anchoring failed, verdict is still valid:", anchorErr.message);
       }
 
-      // --- PHASE 3: SUBMIT COMPACT LEDGER OBJECT TRANSACTION ---
-      // Anchoring the computed object hash to satisfy size limitations
-      await submitResult(walletAPI, aiData.commitment_hash);
-
-      // Success complete integration
-      applyResult({ ...aiData, anchored: true });
-
     } catch (err) {
+      // Only reaches here on a genuine backend/network failure —
+      // i.e. we never got a real verdict to show in the first place.
       console.warn("Pipeline warning/error occurred:", err.message);
       setErrorMessage(err.message);
-      
-      // Standalone sandbox simulation logic fallback
+
       const fallbackKey = Math.random() > 0.5 ? "HUMAN" : "AI_GENERATED";
-      applyResult({ ...MOCK_RESULTS[fallbackKey], anchored: false });
+      applyResult({ ...MOCK_RESULTS[fallbackKey], anchored: false, is_mock: true });
     } finally {
       clearInterval(stepTimerRef.current);
     }
@@ -608,9 +614,9 @@ export default function App() {
                 {result?.verdict || (isAi ? "Synthetic Voice Detected" : "Authentic Voice Detected")}
               </p>
               
-              {errorMessage && (
+              {result?.is_mock && (
                 <div className="my-2 p-2 bg-amber-50 rounded-lg text-[11px] text-amber-800 border border-amber-200 text-center">
-                  Notice: System bypassed wallet check. Loaded standalone mockup. Details: {errorMessage}
+                  ⚠ MOCK RESULT — the analysis service wasn't reachable, so this is placeholder data, not a real result.
                 </div>
               )}
 
