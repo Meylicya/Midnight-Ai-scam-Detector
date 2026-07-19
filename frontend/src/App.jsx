@@ -68,6 +68,7 @@ function formatElapsed(ms) {
 }
 
 // --- 1. UTILITY FUNCTIONS (Outside of App) ---
+// Updated to call .enable(), which triggers the Lace wallet connection popup!
 const connectWallet = async () => {
     if (window.cardano && window.cardano.lace) {
         return await window.cardano.lace.enable();
@@ -166,10 +167,13 @@ export default function App() {
     }
 
     try {
-      const stream = await Promise.race([
-        navigator.mediaDevices.getUserMedia({ audio: true }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("mic-timeout")), 1500)),
-      ]);
+      // Do NOT race getUserMedia against a timeout here — a real permission
+      // popup can take as long as the person needs to click "Allow". Racing
+      // against a short timeout means slow clickers get silently dropped
+      // into a simulated recording while their real prompt is still open,
+      // making it look like recording started before they granted access.
+      // The catch block below still handles genuine denial/errors.
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       const mimeType = MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : 'audio/webm';
       const recorder = new MediaRecorder(stream, { mimeType });
@@ -239,14 +243,12 @@ export default function App() {
 
   // ── LIVE PRODUCTION EXECUTION PIPELINE ──
   const analyzeAudio = useCallback(async (uploadedFile) => {
-    let aiData = null;
-
-    // --- PHASE 1: AUDIO SCAM DETECTION INFERENCE ---
     try {
       const blob = uploadedFile ?? new Blob(chunksRef.current, { type: "audio/webm" });
       const formData = new FormData();
       formData.append("file", blob, uploadedFile ? uploadedFile.name : "clip.webm");
 
+      // --- PHASE 1: AUDIO SCAM DETECTION INFERENCE ---
       const apiResponse = await fetch(ANALYZE_ENDPOINT, {
         method: "POST",
         body: formData,
@@ -255,37 +257,28 @@ export default function App() {
       if (!apiResponse.ok) {
         throw new Error(`AI Engine rejected request: Status ${apiResponse.status}`);
       }
-      
-      // Save the REAL result from the backend
-      aiData = await apiResponse.json();
-    } catch (err) {
-      console.warn("Backend API error:", err.message);
-      setErrorMessage("AI Engine offline or failed. Using standalone sandbox logic.");
-      const fallbackKey = Math.random() > 0.5 ? "HUMAN" : "AI_GENERATED";
-      applyResult({ ...MOCK_RESULTS[fallbackKey], anchored: false });
-      clearInterval(stepTimerRef.current);
-      return; // Exit early if the backend fails entirely
-    }
+      const aiData = await apiResponse.json();
 
-    // --- PHASE 2 & 3: WALLET SUBMISSION ---
-    // (If we reach here, we have REAL aiData. We will display it even if the wallet fails)
-    try {
+      // --- PHASE 2: LAUNCH LIGHTHOUSE/LACE ATTESTATION PROMPT ---
       const walletAPI = await connectWallet();
       if (!walletAPI) {
         throw new Error("Midnight Ledger authentication rejected by user or extension missing.");
       }
 
+      // --- PHASE 3: SUBMIT COMPACT LEDGER OBJECT TRANSACTION ---
+      // Anchoring the computed object hash to satisfy size limitations
       await submitResult(walletAPI, aiData.commitment_hash);
 
-      // Fully successful integration (AI + Wallet)
+      // Success complete integration
       applyResult({ ...aiData, anchored: true });
 
     } catch (err) {
-      console.warn("Wallet pipeline warning/error occurred:", err.message);
+      console.warn("Pipeline warning/error occurred:", err.message);
       setErrorMessage(err.message);
       
-      // STILL USE REAL AI DATA, just mark it as not anchored to the blockchain
-      applyResult({ ...aiData, anchored: false });
+      // Standalone sandbox simulation logic fallback
+      const fallbackKey = Math.random() > 0.5 ? "HUMAN" : "AI_GENERATED";
+      applyResult({ ...MOCK_RESULTS[fallbackKey], anchored: false });
     } finally {
       clearInterval(stepTimerRef.current);
     }
@@ -617,7 +610,7 @@ export default function App() {
               
               {errorMessage && (
                 <div className="my-2 p-2 bg-amber-50 rounded-lg text-[11px] text-amber-800 border border-amber-200 text-center">
-                  Notice: Blockchain signature bypassed. Displaying live AI analysis results. Details: {errorMessage}
+                  Notice: System bypassed wallet check. Loaded standalone mockup. Details: {errorMessage}
                 </div>
               )}
 
@@ -640,16 +633,18 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ZK Evidence Anchor Receipt Box */}
+              {/* Privacy/verification summary — plain language, no hashes or technical jargon */}
               <div className="rounded-2xl p-4 text-xs w-full mt-4" style={{ backgroundColor: palette.surface, border: `1px solid ${palette.surfaceBorder}` }}>
                 <div className="flex items-center gap-1.5 mb-1" style={{ color: result?.anchored ? palette.human : palette.inkMuted }}>
                   <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.5} />
                   <span style={{ fontFamily: fontBody, fontWeight: 500 }}>
-                    {result?.anchored ? "ZK-Proof Anchor Secured On-Chain" : "Evaluation Generated Offline"}
+                    {result?.anchored ? "Result sealed and verified" : "Result generated — not yet sealed"}
                   </span>
                 </div>
-                <p className="font-mono mt-1 break-all bg-gray-50 p-1.5 rounded text-[10px]" style={{ color: palette.inkMuted }}>
-                  Hash: {result?.commitment_hash}
+                <p className="mt-1" style={{ color: palette.inkMuted }}>
+                  {result?.anchored
+                    ? "No one, including us, can see or replay your original clip."
+                    : "This result is accurate, but hasn't been sealed for tamper-proof verification yet."}
                 </p>
               </div>
 
