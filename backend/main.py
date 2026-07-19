@@ -1,5 +1,6 @@
 from typing import Optional
 
+import requests
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -14,6 +15,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─────────────────────────────────────────────────────────────────────────
+# MIDNIGHT INTEGRATION — placeholder bridge, coordinate with P4
+#
+# Per PROJECT_STATE.md's documented architecture, this should eventually
+# go through: Midnight.js SDK -> local Proof Server (localhost:6300)
+# -> submit generated proof to the on-chain Compact contract.
+#
+# What's below is NOT that yet — it's a plain HTTP POST to a placeholder
+# "bridge" URL, same pattern P2's earlier draft used. It's a safe stand-in:
+# if P4's real endpoint isn't live, this fails quietly (caught below) and
+# just marks blockchain_status as "Failed/Skipped" without breaking /analyze.
+#
+# TODO (P4): replace MIDNIGHT_BRIDGE_URL / send_to_midnight() with a real
+# call into the Midnight SDK once the Proof Server + Compact contract are
+# ready to accept submissions.
+# ─────────────────────────────────────────────────────────────────────────
+MIDNIGHT_BRIDGE_URL = "http://localhost:5000/api/submit-result"
+
+
+def send_to_midnight(commitment_hash: str, passed_threshold: bool) -> Optional[dict]:
+    payload = {
+        "resultHash": commitment_hash,
+        "passedThreshold": passed_threshold,
+    }
+    try:
+        response = requests.post(MIDNIGHT_BRIDGE_URL, json=payload, timeout=3)
+        response_data = response.json()
+        if response_data.get("success"):
+            return response_data.get("data")
+        print(f"Blockchain submission failed: {response_data.get('error')}")
+        return None
+    except Exception as e:
+        # Expected to fail until P4's bridge/Proof Server is actually running —
+        # this must never take down /analyze.
+        print(f"Could not connect to Midnight bridge server: {e}")
+        return None
+
 
 # In-memory registry — fast-path MVP for the 48-hour build. Swap for the
 # Midnight registry ledger (see /contract/voiceguard.compact) once P4's
@@ -42,6 +81,12 @@ async def analyze(file: UploadFile = File(...)):
     except Exception as e:
         print(f"CRITICAL ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Backend Error: {str(e)}")
+
+    # --- MIDNIGHT BRIDGE (placeholder, see note above) ---
+    passed_threshold = result["verdict"] == "ai_generated"
+    blockchain_receipt = send_to_midnight(result["commitment_hash"], passed_threshold)
+    result["blockchain_status"] = "Success" if blockchain_receipt else "Failed/Skipped"
+    # -------------------------------------------------------
 
     return result
 
