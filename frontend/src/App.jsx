@@ -399,7 +399,7 @@ export default function App() {
               className="text-sm tracking-tight"
               style={{ fontFamily: fontHeading, fontWeight: 600, color: palette.ink }}
             >
-              VoiceGuard
+              Vera
             </span>
             <span
               className="h-2 w-2 rounded-full animate-pulse"
@@ -426,7 +426,7 @@ export default function App() {
               </h1>
               <p className="text-sm mt-2 leading-relaxed" style={{ color: palette.inkMuted }}>
                 Scam calls sometimes use AI to fake a real person's voice.
-                VoiceGuard listens to a short clip and tells you whether it
+                Vera listens to a short clip and tells you whether it
                 sounds human or AI-made — securely verified via the Midnight network.
               </p>
 
